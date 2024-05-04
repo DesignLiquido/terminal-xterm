@@ -2,10 +2,11 @@
 <html>
   <head>
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
-    <link rel="stylesheet" href="estilos.css" />
+    <link rel="stylesheet" href="/css/estilos.css" />
 
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="/js/comandos.js"></script>
   </head>
   <body>
     <div id="terminal"></div>
@@ -13,75 +14,133 @@
       var term = new Terminal({
         rows: 50,
         fontFamily: '"Cascadia Code", Menlo, monospace',
-        allowProposedApi: true
+        allowProposedApi: true,
       });
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
 
-      var command = '';
+      var comando = "";
       term.open(document.getElementById("terminal"));
       fitAddon.fit();
-      var commands = [];
 
       function terminalPrompt(term) {
-        command = '';
-        term.write('\r\n$ ');
+        comando = "";
+        term.write("\r\n$ ");
       }
 
-      function runCommand(term, text) {
-        const command = text.trim().split(' ')[0];
-        if (command.length > 0) {
-          term.writeln('');
-          if (command in commands) {
-            commands[command].f();
+      var comandos = {
+        ajuda: {
+          f: () => {
+            const padding = 10;
+            function formatMessage(name, descricao) {
+              const maxLength = term.cols - padding - 3;
+              let remaining = descricao;
+              const d = [];
+              while (remaining.length > 0) {
+                // Trim any spaces left over from the previous line
+                remaining = remaining.trimStart();
+                // Check if the remaining text fits
+                if (remaining.length < maxLength) {
+                  d.push(remaining);
+                  remaining = "";
+                } else {
+                  let splitIndex = -1;
+                  // Check if the remaining line wraps already
+                  if (remaining[maxLength] === " ") {
+                    splitIndex = maxLength;
+                  } else {
+                    // Find the last space to use as the split index
+                    for (let i = maxLength - 1; i >= 0; i--) {
+                      if (remaining[i] === " ") {
+                        splitIndex = i;
+                        break;
+                      }
+                    }
+                  }
+                  d.push(remaining.substring(0, splitIndex));
+                  remaining = remaining.substring(splitIndex);
+                }
+              }
+              const message =
+                `  \x1b[36;1m${name.padEnd(padding)}\x1b[0m ${d[0]}` +
+                d.slice(1).map((e) => `\r\n  ${" ".repeat(padding)} ${e}`);
+              return message;
+            }
+            term.writeln(
+              [
+                "Bem-vindo(a) ao terminal on-line da Design Líquido! Experimente um dos comandos abaixo.",
+                "",
+                ...Object.keys(comandos).map((e) =>
+                  formatMessage(e, comandos[e].descricao)
+                ),
+              ].join("\n\r")
+            );
+            terminalPrompt(term);
+          },
+          descricao: "Imprime esta mensagem de ajuda",
+        },
+      };
+
+      function executarComando(term, text) {
+        const comando = text.trim().split(" ")[0];
+        if (comando.length > 0) {
+          term.writeln("");
+          if (comando in comandos) {
+            comandos[comando].f();
             return;
           }
 
-          term.writeln(`${command}: comando não encontrado.`);
+          term.writeln(`${comando}: comando não encontrado.`);
         }
 
         terminalPrompt(term);
       }
-      
+
       term.prompt = () => {
-        term.write('\r\n$ ');
+        term.write("\r\n$ ");
       };
 
-      term.onData(e => {
-      switch (e) {
-        case '\u0003': // Ctrl+C
-          term.write('^C');
-          terminalPrompt(term);
-          break;
-        case '\r': // Enter
-          runCommand(term, command);
-          command = '';
-          break;
-        case '\u007F': // Backspace (DEL)
-          // Não excluir o prompt
-          if (term._core.buffer.x > 2) {
-            term.write('\b \b');
-            if (command.length > 0) {
-              command = command.substr(0, command.length - 1);
+      term.onData((e) => {
+        switch (e) {
+          case "\u0003": // Ctrl+C
+            term.write("^C");
+            terminalPrompt(term);
+            break;
+          case "\r": // Enter
+            executarComando(term, comando);
+            comando = "";
+            break;
+          case "\u007F": // Backspace (DEL)
+            // Não excluir o prompt
+            if (term._core.buffer.x > 2) {
+              term.write("\b \b");
+              if (comando.length > 0) {
+                comando = comando.substr(0, comando.length - 1);
+              }
             }
-          }
-          break;
-        default: // Caso geral: imprimir todos os caracteres.
-          if (e >= String.fromCharCode(0x20) && e <= String.fromCharCode(0x7E) || e >= '\u00a0') {
-            command += e;
-            term.write(e);
-          }
+            break;
+          default: // Caso geral: imprimir todos os caracteres.
+            if (
+              (e >= String.fromCharCode(0x20) &&
+                e <= String.fromCharCode(0x7e)) ||
+              e >= "\u00a0"
+            ) {
+              comando += e;
+              term.write(e);
+            }
         }
       });
 
-      term.writeln([
-        '    Este é o terminal online da Design Líquido. Por ele, você pode experimentar nossas',
-        '     linguagens de programação, como \x1b[3mDelégua\x1b[0m e \x1b[3mPituguês\x1b[0m!',
-        '',
-        ''
-      ].join('\n\r'));
+      term.writeln(
+        [
+          "    Este é o terminal online da Design Líquido. Por ele, você pode experimentar nossas",
+          "     linguagens de programação, como \x1b[3mDelégua\x1b[0m e \x1b[3mPituguês\x1b[0m!",
+          "",
+          "",
+        ].join("\n\r")
+      );
 
-      term.writeln('Experimente digitar `ajuda`.');
+      term.writeln("Experimente digitar `ajuda`.");
       terminalPrompt(term);
     </script>
   </body>
