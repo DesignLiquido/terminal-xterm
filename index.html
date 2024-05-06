@@ -4,9 +4,11 @@
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <link rel="stylesheet" href="/css/estilos.css" />
 
+    <script src="node_modules/@designliquido/delegua/umd/delegua.js"></script>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <script src="/js/comandos.js"></script>
+    <script src="/js/await-notify.js"></script>
   </head>
   <body>
     <div id="terminal"></div>
@@ -19,13 +21,58 @@
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
 
+      const delegua = window.Delegua;
       var comando = "";
+      var resultadoLeia = "";
+      var modoDelegua = false;
+      var comandoLeia = false;
+      var promessaLeitura = new window.Subject();
+
+      const lexador = new delegua.Lexador();
+      const avaliadorSintatico = new delegua.AvaliadorSintatico();
+      const interpretador = new delegua.InterpretadorBase('', false, term.write, term.write);
+      interpretador.interfaceEntradaSaida = {
+        question: (mensagem, callback) => {
+          comandoLeia = true;
+          term.write("\r\n");
+          term.write(mensagem);
+          promessaLeitura.wait().then(_ => {
+            const copiaResultadoLeia = resultadoLeia;
+            resultadoLeia = "";
+            callback(copiaResultadoLeia);
+          });
+        }
+      }
+
+      async function executarInstrucaoDelegua(terminal, linha) {
+        const resultadoLexador = lexador.mapear([linha], -1);
+        const resultadoAvaliacaoSintatica = avaliadorSintatico.analisar(resultadoLexador);
+        interpretador.interpretar(
+          resultadoAvaliacaoSintatica.declaracoes,
+          true
+        ).then(retornoInterpretador => {
+          if (retornoInterpretador.resultado.length > 0) {
+            const primeiroResultado = retornoInterpretador.resultado[0];
+            terminal.write("\r\n");
+            terminal.write(primeiroResultado);
+          }
+          
+          terminal.write("\r\n");
+          deleguaPrompt(terminal);
+        });
+      }
+      
       term.open(document.getElementById("terminal"));
       fitAddon.fit();
 
       function terminalPrompt(term) {
         comando = "";
         term.write("\r\n$ ");
+      }
+
+      function deleguaPrompt(terminal) {
+        comando = "";
+        terminal.write("\r\ndelegua> ");
       }
 
       var comandos = {
@@ -79,21 +126,30 @@
           },
           descricao: "Imprime esta mensagem de ajuda",
         },
+        delegua: {
+          descricao: "Inicia o modo LAIR (Leia-Avalie-Imprima-Repita) da linguagem Delégua",
+          f: () => {
+            modoDelegua = true;
+            term.write(`Console da Linguagem Delégua v1.2.2\r\n`);
+            term.write("Pressione Ctrl + C para sair\r\n");
+            deleguaPrompt(term);
+          }
+        }
       };
 
-      function executarComando(term, text) {
+      function executarComando(terminal, text) {
         const comando = text.trim().split(" ")[0];
         if (comando.length > 0) {
-          term.writeln("");
+          terminal.writeln("");
           if (comando in comandos) {
             comandos[comando].f();
             return;
           }
 
-          term.writeln(`${comando}: comando não encontrado.`);
+          terminal.writeln(`${comando}: comando não encontrado.`);
         }
 
-        terminalPrompt(term);
+        terminalPrompt(terminal);
       }
 
       term.prompt = () => {
@@ -103,16 +159,32 @@
       term.onData((e) => {
         switch (e) {
           case "\u0003": // Ctrl+C
+            if (modoDelegua) {
+              modoDelegua = false;
+            }
+
             term.write("^C");
             terminalPrompt(term);
             break;
           case "\r": // Enter
-            executarComando(term, comando);
+            if (modoDelegua) {
+              if (comandoLeia) {
+                comandoLeia = false;
+                resultadoLeia = comando; // Preciso fazer isso porque o callback da leitura é executado depois que `comando` é limpo.
+                promessaLeitura.notify();
+              } else {
+                executarInstrucaoDelegua(term, comando);
+              }
+            } else {
+              executarComando(term, comando);
+            }
+            
             comando = "";
             break;
           case "\u007F": // Backspace (DEL)
             // Não excluir o prompt
-            if (term._core.buffer.x > 2) {
+            const bufferAtual = modoDelegua ? 9 : 2;
+            if (term._core.buffer.x > bufferAtual) {
               term.write("\b \b");
               if (comando.length > 0) {
                 comando = comando.substr(0, comando.length - 1);

@@ -14,5 +14,9 @@
     "allowJs": true,
     "skipLibCheck": true
   },
-  "exclude": ["babel.config.js", "dist/**/*"]
+  "exclude": [
+    "babel.config.js", 
+    "dist/**/*",
+    "node_modules/@xterm/**/*"
+  ]
 }
