@@ -134,6 +134,13 @@
             term.write("Pressione Ctrl + C para sair\r\n");
             deleguaPrompt(term);
           }
+        },
+        limpar: {
+          descricao: "Limpa a tela do terminal.",
+          f: () => {
+            term.reset();
+            terminalPrompt(term);
+          }
         }
       };
 
